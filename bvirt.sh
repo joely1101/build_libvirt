@@ -70,6 +70,8 @@ get_source()
         get_type=wget
     elif test "$(echo ${srcfile} | grep -c '.*://.*\.git')" -ne 0; then
         get_type=git
+    elif test "$(echo ${srcfile} | grep -c 'git://.*')" -ne 0; then
+        get_type=git
     else
         error_out "unknow source type"
     fi
@@ -100,7 +102,7 @@ get_source()
     DR=$(find $builddir/src/* -maxdepth 0 -type d)
     DD=$(echo $DR | wc -l)
     [ "$DD" != "1" ] && error_out "source directory '$DR' can't process!!"
-    ln -sf $DR $builddir/src_link
+    ln -s $DR $builddir/src_link
     source_path=$builddir/src_link
     builddir_path=$builddir
     #echo "$source_path"
@@ -108,6 +110,7 @@ get_source()
 }
 build_now()
 {
+    set -x
     local CFG_PARAM=$1
     local PRE_CFG_PARAM=$2
     if [ "$3" != "" ];then
@@ -276,6 +279,21 @@ build_lvm2()
     #build_generic "$SOURCE" "$1" "$CFG_PARAM" "$CFG_PRE"
 }
 pkg_add $BDIR
+######################gnutls###################################
+BDIR=yajl
+build_yajl()
+{
+    local SOURCE=https://github.com/lloyd/yajl/archive/1.0.12.tar.gz
+    local CFG_PRE=
+    local CFG_PARAM=
+    get_source $SOURCE $1
+    cd ${source_path} && CC=$CC ./configure --prefix=/home/jlee/work/2019/03/bv3/build_libvirt/rootfs.libvirt || error_out "configure failed"
+    cd -
+    cd ${source_path}/build && make all install || error_out "build failed"
+    cd -
+}
+pkg_add $BDIR
+
 
 ######################gnutls###################################
 BDIR=gnutls
@@ -359,8 +377,8 @@ pkg_add $BDIR
 BDIR=libvirt
 build_libvirt()
 {
-    local SOURCE=https://libvirt.org/sources/libvirt-5.0.0.tar.xz
-    local CFG_PARAM="--without-macvtap --without-xenapi --without-storage-mpath --without-yajl"
+    local SOURCE=https://libvirt.org/sources/libvirt-4.5.0.tar.xz
+    local CFG_PARAM="--without-macvtap --without-xenapi --without-storage-mpath --with-yajl=$BS_ROOTFS"
     local CFG_PRE=""
     
     get_source "$SOURCE" "$1"
