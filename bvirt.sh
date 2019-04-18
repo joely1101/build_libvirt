@@ -287,7 +287,7 @@ build_yajl()
     local CFG_PRE=
     local CFG_PARAM=
     get_source $SOURCE $1
-    cd ${source_path} && CC=$CC ./configure --prefix=/home/jlee/work/2019/03/bv3/build_libvirt/rootfs.libvirt || error_out "configure failed"
+    cd ${source_path} && CC=$CC ./configure --prefix=$BS_ROOTFS || error_out "configure failed"
     cd -
     cd ${source_path}/build && make all install || error_out "build failed"
     cd -

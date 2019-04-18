@@ -84,6 +84,6 @@ elif [ "$action" = "rootfs" ];then
     #run deb install
     run_debootstrap
 else
-    echo "$0 os - build docker os for henerate rootfs"
+    echo "$0 os - build docker os for generate rootfs"
     echo "$0 rootfs dir - generate rootfs in dir"
 fi
