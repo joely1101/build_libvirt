@@ -192,7 +192,9 @@ BDIR=libnl
 build_libnl()
 {
     SOURCE=https://www.infradead.org/~tgr/libnl/files/libnl-3.2.0.tar.gz
-    build_generic "$SOURCE" "$1" "" ""
+    get_source "$SOURCE" "$1"
+    sed -i 's/| a29k/| a29k | aarch64/g' ${source_path}/config.sub
+    build_now "" "" "" 
 
 }
 pkg_add $BDIR
