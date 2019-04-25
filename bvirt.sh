@@ -1,41 +1,58 @@
 #!/bin/bash
+
+TARGET=arm64
+if [ "$1" = "x64" ];then
+    TARGET=x64
+    shift
+fi
+
 CURDIR=$PWD
 env_setup()
 {
-    TOOLPATH=/usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/bin
-    CROSS_HOST=aarch64-linux-gnu
-    CROSS_COMPILE=aarch64-linux-gnu-
-    BS_BUILDDIR=${CURDIR}/build
-    BS_ROOTFS=${CURDIR}/rootfs
+    BS_BUILDDIR=${CURDIR}/build.$TARGET
+    BS_ROOTFS=${CURDIR}/rootfs.$TARGET
     BS_BUILD_NAME=buildme
     BS_LOGDIR=${CURDIR}/logs
-    BS_SOURCE_CACHE=/tmp/build_rbbn
+    BS_SOURCE_CACHE=/tmp/build_package
     [ ! -d $BS_SOURCE_CACHE ] && mkdir $BS_SOURCE_CACHE
     [ ! -d $BS_LOGDIR ] && mkdir $BS_LOGDIR
     PKG_CONFIG_PATH=${BS_ROOTFS}/lib/pkgconfig/
     PKG_CONFIG_LIBDIR=${PKG_CONFIG_PATH}
     CC=${CROSS_COMPILE}gcc
     CXX=${CROSS_COMPILE}g++
-    ${TOOLPATH}/${CROSS_COMPILE}gcc -v &>/dev/null
-    if [ "$?" != "0" ];then
-        echo "toolchain not found, you need put toolchain at /usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu"
-        exit 99
-    fi
-    
-    #check pkg-config
-    PKG_CONF=`which pkg-config`
-    eval ${PKG_CONF} -h &>/dev/null
-    
-    [ "$?" != "0" ] && echo "pkg-config not found please install it" && return
-    if [ ! -f ${TOOLPATH}/aarch64-linux-gnu-pkg-config ];then
-        echo "please do link for pkg-config"
-        echo "ln -sf /usr/bin/pkg-config ${TOOLPATH}/${CROSS_COMPILE}pkg-config"
-        exit 99
-    fi
+    if [ "$TARGET" = "arm64" ];then
+        TOOLPATH=/usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/bin
+        CROSS_HOST=aarch64-linux-gnu
 
-    PATH=$TOOLPATH:$PATH
+        ${TOOLPATH}/${CROSS_COMPILE}gcc -v &>/dev/null
+        if [ "$?" != "0" ];then
+            echo "toolchain not found, you need put toolchain at /usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu"
+        exit 99
+        fi
+    
+        #check pkg-config
+        PKG_CONF=`which pkg-config`
+        eval ${PKG_CONF} -h &>/dev/null
+        
+        [ "$?" != "0" ] && echo "pkg-config not found please install it" && return
+        if [ ! -f ${TOOLPATH}/aarch64-linux-gnu-pkg-config ];then
+            echo "please do link for pkg-config"
+            echo "ln -sf /usr/bin/pkg-config ${TOOLPATH}/${CROSS_COMPILE}pkg-config"
+            exit 99
+        fi
+        
+        CONFIGURE_HOST="--host=$CROSS_HOST"
+        PATH=$TOOLPATH:$PATH
+    
+    elif [ "$TARGET" = "x64" ];then
+        CROSS_HOST=x86_64-linux-gnu
+    else
+        echo "unkonw target"
+        exit 99
+    fi
+    
     export PATH BS_ROOTFS PKG_CONFIG_PATH PKG_CONFIG_LIBDIR CROSS_HOST CROSS_COMPILE 
-    export CC CXX
+    export CC CXX CONFIGURE_HOST
 
 }
 env_show()
@@ -87,30 +104,31 @@ get_source()
     fi
     
     [ ! -d $builddir ] && mkdir -p $builddir
-    [ ! -d $builddir/src ] && mkdir -p $builddir/src
-    cd $builddir/src
-    if [ ! -d $builddir/src_link ];then
+    [ ! -d $builddir/source ] && mkdir -p $builddir/source
+    cd $builddir/source
+
+    if [ ! -L $builddir/lsource ];then
         if [ "$get_type" = "wget" ]; then
             tar xf $source_cached || error_out "untar $source_cached failed"
-        elif [ "$get_type" = "git" -a ! -d $builddir/src_link ]; then
+        elif [ "$get_type" = "git" -a ! -d $builddir/lsource ]; then
             git clone $source_cached || error_out "git clone $source_cached failed"
         else
             error_out "unknow type!!"
         fi
+        cd - &>/dev/null
+        DR=$(find $builddir/source/* -maxdepth 0 -type d)
+        DD=$(echo $DR | wc -l)
+        [ "$DD" != "1" ] && error_out "source directory '$DR' can't process!!"    
+        ln -s $DR $builddir/lsource
     fi
-    cd - &>/dev/null
-    DR=$(find $builddir/src/* -maxdepth 0 -type d)
-    DD=$(echo $DR | wc -l)
-    [ "$DD" != "1" ] && error_out "source directory '$DR' can't process!!"
-    ln -s $DR $builddir/src_link
-    source_path=$builddir/src_link
+
+    source_path=$builddir/lsource
     builddir_path=$builddir
-    #echo "$source_path"
-    #echo "$builddir_path"
+    echo "$source_path"
+    echo "$builddir_path"
 }
 build_now()
 {
-    set -x
     local CFG_PARAM=$1
     local PRE_CFG_PARAM=$2
     if [ "$3" != "" ];then
@@ -118,9 +136,12 @@ build_now()
     else
         CPUS_JOBS=-j1
     fi
+    
+    [ "$TARGET" = "x64" ] && PRE_CFG_PARAM+=" CFLAGS=-fPIC"
+
     mkdir -p $builddir_path/$BS_BUILD_NAME
     if [ ! -f $builddir_path/$BS_BUILD_NAME/build.ok ];then
-        cd $builddir_path/$BS_BUILD_NAME && eval $PRE_CFG_PARAM $source_path/configure --host=$CROSS_HOST --prefix=$BS_ROOTFS $CFG_PARAM && make $CPUS_JOBS all install && touch build.ok || error_out "build fail"
+        cd $builddir_path/$BS_BUILD_NAME && eval $PRE_CFG_PARAM $source_path/configure $CONFIGURE_HOST --prefix=$BS_ROOTFS $CFG_PARAM && make $CPUS_JOBS all install && touch build.ok || error_out "build fail"
         cd - &>/dev/null
     else
         echo "$builddir_path already build"
@@ -161,9 +182,18 @@ BDIR=pcre
 build_pcre()
 {
     SOURCE=ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre/pcre-8.43.tar.gz
-    build_generic "$SOURCE" "$1" "" ""
+    build_generic "$SOURCE" "$1" "--enable-utf --enable-unicode-properties" ""
 }
 pkg_add $BDIR
+
+######################pcre###################################
+BDIR=libnl
+build_libnl()
+{
+    SOURCE=https://www.infradead.org/~tgr/libnl/files/libnl-3.1.tar.gz
+    build_generic "$SOURCE" "$1" "" ""
+}
+#pkg_add $BDIR
 
 ######################zlib###################################
 BDIR=zlib
@@ -188,7 +218,7 @@ BDIR=glib
 build_glib()
 {
     local SOURCE=https://download.gnome.org/sources/glib/2.49/glib-2.49.7.tar.xz
-    local CFG_PRE="ac_cv_type_long_long=yes glib_cv_stack_grows=no glib_cv_uscore=no ac_cv_func_posix_getpwuid_r=yes ac_cv_func_posix_getgrgid_r=yes"
+    local CFG_PRE="ac_cv_type_long_long=yes glib_cv_stack_grows=no glib_cv_uscore=no ac_cv_func_posix_getpwuid_r=yes ac_cv_func_posix_getgrgid_r=yes glib_cv_pcre_has_unicode=yes"
     local CFG_PARAM="--without-libiconv"
     build_generic "$SOURCE" "$1" "$CFG_PARAM" "$CFG_PRE" "-j1"
     
@@ -248,7 +278,7 @@ build_cyrus-sasl()
     local CFG_PARAM=""
     build_generic "$SOURCE" "$1" "$CFG_PARAM" ""
 }
-pkg_add $BDIR
+#pkg_add $BDIR
 ################################################################
 BDIR=aio
 build_aio()
@@ -257,7 +287,7 @@ build_aio()
     get_source $SOURCE $1
     make -C ${source_path} all install DESTDIR=$BS_ROOTFS
 }
-pkg_add $BDIR
+#pkg_add $BDIR
 
 ################################################################
 BDIR=lvm2
@@ -270,7 +300,7 @@ build_lvm2()
     
     mkdir -p $builddir_path/$BS_BUILD_NAME
     if [ ! -f $builddir_path/$BS_BUILD_NAME/build.ok ];then
-        cd $builddir_path/$BS_BUILD_NAME && eval $CFG_PRE $source_path/configure --host=$CROSS_HOST --prefix=$BS_ROOTFS $CFG_PARAM && make $CPUS_JOBS all install DESTDIR=$BS_ROOTFS && touch build.ok || error_out "build fail"
+        cd $builddir_path/$BS_BUILD_NAME && eval $CFG_PRE $source_path/configure $CONFIGURE_HOST --prefix=$BS_ROOTFS $CFG_PARAM && make $CPUS_JOBS all install DESTDIR=$BS_ROOTFS && touch build.ok || error_out "build fail"
         cd - &>/dev/null
     else
         echo "$builddir_path already build"
@@ -278,7 +308,7 @@ build_lvm2()
     
     #build_generic "$SOURCE" "$1" "$CFG_PARAM" "$CFG_PRE"
 }
-pkg_add $BDIR
+#pkg_add $BDIR
 ######################gnutls###################################
 BDIR=yajl
 build_yajl()
@@ -287,7 +317,7 @@ build_yajl()
     local CFG_PRE=
     local CFG_PARAM=
     get_source $SOURCE $1
-    cd ${source_path} && CC=$CC ./configure --prefix=$BS_ROOTFS || error_out "configure failed"
+    cd ${source_path} && CC=$CC CFLAGS=-fPIC ./configure --prefix=$BS_ROOTFS || error_out "configure failed"
     cd -
     cd ${source_path}/build && make all install || error_out "build failed"
     cd -
@@ -300,7 +330,7 @@ BDIR=gnutls
 build_gnutls()
 {
     local SOURCE=https://www.gnupg.org/ftp/gcrypt/gnutls/v3.6/gnutls-3.6.0.tar.xz
-    local CFG_PRE="GMP_LIBS='-L$BS_ROOTFS/lib/ -lgmp'"
+    local CFG_PRE="GMP_LIBS='-L$BS_ROOTFS/lib/ -lgmp' "
     local CFG_PARAM="GMP_LIBS='-L$BS_ROOTFS/lib/ -lgmp' --with-included-libtasn1 --with-included-unistring "
     CFG_PARAM+="--without-p11-kit "
     #CFG_PARAM+="--with-default-trust-store-pkcs11='pkcs11:' "
@@ -320,7 +350,8 @@ build_qemu()
     PARAM+="--disable-strip "
     PARAM+="--disable-werror "
     PARAM+="--disable-gcrypt "
-    PARAM+="--disable-debug-info "
+    PARAM+="--enable-debug-info "
+    PARAM+="--enable-debug "
     PARAM+="--disable-debug-tcg "
     PARAM+="--disable-docs "
     PARAM+="--disable-tcg-interpreter "
@@ -332,7 +363,7 @@ build_qemu()
     PARAM+="--disable-curl "
     PARAM+="--disable-glusterfs "
     PARAM+="--disable-gnutls "
-    PARAM+="--disable-nettle "
+    #PARAM+="--disable-nettle "
     PARAM+="--disable-gtk "
     PARAM+="--disable-rdma "
     PARAM+="--disable-libiscsi "
@@ -354,7 +385,7 @@ build_qemu()
     PARAM+="--disable-libusb "
     PARAM+="--disable-usb-redir "
     PARAM+="--disable-vde "
-    PARAM+="--disable-vhost-net "
+    #PARAM+="--disable-vhost-net "
     PARAM+="--disable-virglrenderer "
     PARAM+="--disable-virtfs "
     PARAM+="--disable-vnc "
@@ -362,14 +393,22 @@ build_qemu()
     PARAM+="--disable-xen "
     PARAM+="--disable-xen-pci-passthrough "
     PARAM+="--disable-xfsctl "
-    PARAM+="--disable-blobs "
+    #PARAM+="--disable-blobs "
     PARAM+="--disable-tools "
     PARAM+="--disable-pie "
+    #PARAM+="--extra-ldflags='-L$BS_ROOTFS/lib/ -L$BS_ROOTFS/usr/lib/ -L$BS_ROOTFS/lib64/ -lgmp -lhogweed'"
+    PRE_CFG=
+    if [ "$TARGET" = "arm64" ];then
+        QEMU_TGT=aarch64-softmmu
+    elif [ "$TARGET" = "x64" ];then
+        QEMU_TGT=x86_64-softmmu
+    fi
+    local CFG_PARAM="--cross-prefix=${CROSS_COMPILE}  --target-list='$QEMU_TGT' $PARAM"
     
-    local CFG_PARAM="--cross-prefix=${CROSS_COMPILE}  --target-list=aarch64-softmmu $PARAM"
     local SOURCE=https://download.qemu.org/qemu-3.1.0.tar.xz    
+    
     get_source $SOURCE $1
-    build_generic "$SOURCE" "$1" "$CFG_PARAM" "" "-j1"
+    build_generic "$SOURCE" "$1" "$CFG_PARAM" "$PRE_CFG" "-j1"
 }
 pkg_add $BDIR
 
@@ -377,14 +416,27 @@ pkg_add $BDIR
 BDIR=libvirt
 build_libvirt()
 {
-    local SOURCE=https://libvirt.org/sources/libvirt-4.5.0.tar.xz
-    local CFG_PARAM="--without-macvtap --without-xenapi --without-storage-mpath --with-yajl=$BS_ROOTFS"
+    local SOURCE=https://libvirt.org/sources/libvirt-3.6.0.tar.xz
+    #local CFG_PARAM="--with-macvtap --without-xenapi --with-storage-fs --without-storage-mpath --with-yajl=$BS_ROOTFS --with-xml2=$BS_ROOTFS"
+#    local CFG_PARAM="--with-macvtap=yes --without-esx --without-xenapi --without-xen --without-lxc --with-storage-fs --without-storage-mpath --with-yajl=$BS_ROOTFS --with-xml2=$BS_ROOTFS --without-udev"
+    local CFG_PARAM="--without-macvtap --without-numactl --without-dbus --without-firewalld --without-fuse --without-pm-utils  --without-esx --without-lxc --without-storage-mpath --with-yajl=$BS_ROOTFS --with-xml2=$BS_ROOTFS"
     local CFG_PRE=""
-    
+    CFG_PARAM+=" --without-libxl --with-xen-inotify --without-xenapi --without-xen"    
+    CFG_PARAM+=" --without-selinux --without-selinux-mount"
+    CFG_PARAM+=" -without-hyperv --without-esx --without-virtualport --without-xdr --without-sasl"
+    CFG_PARAM+=" --without-uml --without-openvz --without-vmware --without-vbox"
+    CFG_PARAM+=" --without-storage-lvm --without-storage-fs --without-storage-netfs --without-storage-fs --without-storage-zfs --without-glusterfs --without-storage-iscsi --without-storage-scsi"
+    #--with-macvtap=yes
     get_source "$SOURCE" "$1"
     mkdir -p $builddir_path/$BS_BUILD_NAME
     if [ ! -f $builddir_path/$BS_BUILD_NAME/build.ok ];then
-        cd $builddir_path/$BS_BUILD_NAME && eval $PRE_CFG_PARAM $source_path/configure --host=$CROSS_HOST --prefix= $CFG_PARAM && make $CPUS_JOBS all install DESTDIR=$BS_ROOTFS && touch build.ok || error_out "build fail"
+        cd $builddir_path/$BS_BUILD_NAME
+        if [ ! -f $builddir_path/$BS_BUILD_NAME/Makefile ];then
+            eval $PRE_CFG_PARAM $source_path/configure $CONFIGURE_HOST --prefix=/usr $CFG_PARAM
+            #rework config.h
+            #sed -i "s/HAVE_DECL_DEVLINK_CMD_ESWITCH_GET 1/HAVE_DECL_DEVLINK_CMD_ESWITCH_GET 0/g" $builddir_path/$BS_BUILD_NAME/config.h
+        fi 
+        make -j4  V=1 $CPUS_JOBS all install DESTDIR=$BS_ROOTFS && touch build.ok || error_out "build fail"
         cd - &>/dev/null
     else
         echo "$builddir_path already build"
@@ -394,17 +446,97 @@ build_libvirt()
 }
 pkg_add $BDIR
 
-build_toolslib()
+build_busybox()
 {
-        #copy rootfs/lib/ xxx to rootfs.release
-        #copy toolchain lob to rootfs.release
-        cp -a /usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/aarch64-linux-gnu/lib64/*.so $BS_ROOTFS/lib/
-        cp -a /usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/aarch64-linux-gnu/lib64/*.so.* $BS_ROOTFS/lib/
-        cp -a /usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/aarch64-linux-gnu/libc/lib/*.so $BS_ROOTFS/lib/
-	    cp -a /usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/aarch64-linux-gnu/libc/lib/*.so.* $BS_ROOTFS/lib/
-	    ln -sf /lib/ld-2.25.so $BS_ROOTFS/lib/ld-linux-aarch64.so.1  
+    local SOURCE=https://www.busybox.net/downloads/busybox-1.30.1.tar.bz2
+    local CFG_PARAM=""
+    local CFG_PRE=""
+    get_source $SOURCE $1
+    if [ ! -f ${source_path}/.config ];then
+        make -C ${source_path}/ defconfig
+        sed -i "s/CONFIG_CROSS_COMPILER_PREFIX=\"\".*/CONFIG_CROSS_COMPILER_PREFIX=\"$CROSS_COMPILE\"/g" ${source_path}/.config
+        sed -i "s/# CONFIG_STATIC is not set/CONFIG_STATIC=y/g" ${source_path}/.config
+    fi
+    make -C ${source_path}/ clean all install CONFIG_PREFIX=$BS_ROOTFS || error_out "build fail"
+}    
+pkg_add busybox
+prepare_file()
+{
+    cat > $BS_ROOTFS/run.sh << EOF	    
+#!/bin/sh
+#need mount ..
+mkdir -p dev proc sys
+mount -o bind /dev/ dev
+mount -o bind /dev/pts dev/pts
+mount -o bind /proc/ proc
+./bin/busybox chroot . /bin/ash
+umount proc dev/pts dev sys
+EOF
+    if [ "$TARGET" = "arm64" ];then
+        QEMU_NAME=qemu-system-aarch64
+    elif [ "$TARGET" = "x64" ];then
+        QEMU_NAME=qemu-system-x86_64
+    else
+        echo "unknow type"
+    fi
+    
+    cat > $BS_ROOTFS/usr/bin/kvm << EOF	    
+#!/bin/sh
+exec $QEMU_NAME -enable-kvm "\$@"
+EOF
+
 }
-pkg_add toolslib
+strip_files()
+{
+    STRIP=${CROSS_COMPILE}strip
+    find $BS_ROOTFS -name *.a | xargs rm -f
+    find $BS_ROOTFS -name *.la | xargs rm -f
+    #find $BS_ROOTFS -type f -name *.so* | xargs $STRIP
+    find $BS_ROOTFS -executable -type f | xargs $STRIP
+    #remove grabage....
+    mv $BS_ROOTFS/share/qemu $BS_ROOTFS/
+    rm -rf $BS_ROOTFS/share/*
+    mv $BS_ROOTFS/qemu $BS_ROOTFS/share/
+    
+    mv $BS_ROOTFS/usr/share/libvirt $BS_ROOTFS/
+    rm -rf $BS_ROOTFS/usr/share/*
+    mv $BS_ROOTFS/libvirt $BS_ROOTFS/usr/share/
+}
+
+build_toolslib_arm64()
+{
+    #copy rootfs/lib/ xxx to rootfs.release
+    #copy toolchain lob to rootfs.release
+    cp -a /usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/aarch64-linux-gnu/lib64/*.so $BS_ROOTFS/lib/
+    cp -a /usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/aarch64-linux-gnu/lib64/*.so.* $BS_ROOTFS/lib/
+    cp -a /usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/aarch64-linux-gnu/libc/lib/*.so $BS_ROOTFS/lib/
+    cp -a /usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/aarch64-linux-gnu/libc/lib/*.so.* $BS_ROOTFS/lib/
+    ln -sf /lib/ld-2.25.so $BS_ROOTFS/lib/ld-linux-aarch64.so.1  
+    prepare_file
+}
+if [ "$TARGET" = "arm64" ];then
+pkg_add toolslib_arm64
+fi
+
+build_toolslib_x86()
+{
+    prepare_file
+    #download libc6
+    libcdeb=`ls libc6*.deb`
+    echo "$libcdeb"
+    [ "$libcdeb" = "" ] && apt-get download libc6
+    libcdeb=`ls libc6*.deb`
+    [ "$libcdeb" = "" ] && echo "libc not found" && return
+    dpkg-deb -x $libcdeb $BS_ROOTFS
+    
+    cp /lib/x86_64-linux-gnu/libgcc_s.so.1 $BS_ROOTFS/lib/x86_64-linux-gnu/libgcc_s.so.1
+    cp /etc/passwd /etc/group $BS_ROOTFS/etc/
+    strip_files
+}
+if [ "$TARGET" = "x64" ];then
+pkg_add toolslib_x86
+fi
+
 #################################################################
 clean_list()
 {
