@@ -27,7 +27,8 @@ build_ubuntu18()
         echo "docker run -idt --name $instant_name $VOPTION $image_base"
         docker run -idt --name $instant_name $VOPTION $image_base 
     fi
-    docker exec -it $instant_name bash -c 'apt-get update;apt-get install -y wget autoconf build-essential autogen libtool shtool texinfo pkg-config gettext python ruby cmake libxml2-utils xsltproc flex bison'
+ 
+    docker exec -it $instant_name bash -c 'apt-get update;apt-get install -y wget autoconf build-essential autogen libtool shtool texinfo pkg-config gettext python-dev zlib1g-dev ruby cmake libxml2-utils xsltproc flex bison'
     [ $? -ne 0 ] && echo "docker run error" && return
     
     docker stop $instant_name

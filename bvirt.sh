@@ -20,7 +20,7 @@ env_setup()
     PKG_CONFIG_LIBDIR=${PKG_CONFIG_PATH}
     if [ "$TARGET" = "arm64" ];then
         TOOLPATH=/usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/bin
-        CROSS_COMPILE=aarch64-linux-gnu-
+	CROSS_COMPILE=aarch64-linux-gnu-
         CROSS_HOST=aarch64-linux-gnu
 
         ${TOOLPATH}/${CROSS_COMPILE}gcc -v &>/dev/null
@@ -49,10 +49,9 @@ env_setup()
         echo "unkonw target"
         exit 99
     fi
-   
     CC=${CROSS_COMPILE}gcc
     CXX=${CROSS_COMPILE}g++
- 
+
     export PATH BS_ROOTFS PKG_CONFIG_PATH PKG_CONFIG_LIBDIR CROSS_HOST CROSS_COMPILE 
     export CC CXX CONFIGURE_HOST
 
@@ -192,10 +191,11 @@ pkg_add $BDIR
 BDIR=libnl
 build_libnl()
 {
-    SOURCE=https://www.infradead.org/~tgr/libnl/files/libnl-3.1.tar.gz
+    SOURCE=https://www.infradead.org/~tgr/libnl/files/libnl-3.2.0.tar.gz
     build_generic "$SOURCE" "$1" "" ""
+
 }
-#pkg_add $BDIR
+pkg_add $BDIR
 
 ######################zlib###################################
 BDIR=zlib
@@ -216,6 +216,7 @@ build_zlib()
 pkg_add $BDIR
 
 ######################glib###################################
+
 BDIR=glib
 build_glib()
 {
@@ -418,14 +419,14 @@ pkg_add $BDIR
 BDIR=libvirt
 build_libvirt()
 {
-    local SOURCE=https://libvirt.org/sources/libvirt-3.6.0.tar.xz
+    local SOURCE=https://libvirt.org/sources/libvirt-5.0.0.tar.xz
     #local CFG_PARAM="--with-macvtap --without-xenapi --with-storage-fs --without-storage-mpath --with-yajl=$BS_ROOTFS --with-xml2=$BS_ROOTFS"
 #    local CFG_PARAM="--with-macvtap=yes --without-esx --without-xenapi --without-xen --without-lxc --with-storage-fs --without-storage-mpath --with-yajl=$BS_ROOTFS --with-xml2=$BS_ROOTFS --without-udev"
-    local CFG_PARAM="--without-macvtap --without-numactl --without-dbus --without-firewalld --without-fuse --without-pm-utils  --without-esx --without-lxc --without-storage-mpath --with-yajl=$BS_ROOTFS --with-xml2=$BS_ROOTFS"
+    local CFG_PARAM="--with-macvtap --without-numactl --without-dbus --without-firewalld --without-fuse --without-pm-utils  --without-esx --without-lxc --without-storage-mpath --with-yajl=$BS_ROOTFS --with-xml2=$BS_ROOTFS"
     local CFG_PRE=""
     CFG_PARAM+=" --without-libxl --with-xen-inotify --without-xenapi --without-xen"    
     CFG_PARAM+=" --without-selinux --without-selinux-mount"
-    CFG_PARAM+=" -without-hyperv --without-esx --without-virtualport --without-xdr --without-sasl"
+    CFG_PARAM+=" -without-hyperv --without-esx --with-virtualport --without-xdr --without-sasl"
     CFG_PARAM+=" --without-uml --without-openvz --without-vmware --without-vbox"
     CFG_PARAM+=" --without-storage-lvm --without-storage-fs --without-storage-netfs --without-storage-fs --without-storage-zfs --without-glusterfs --without-storage-iscsi --without-storage-scsi"
     #--with-macvtap=yes
