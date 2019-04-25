@@ -67,6 +67,6 @@ elif [ "$action" = "login" ];then
     else
         MTNAME=`whoami`
         #echo "lgoin as $MYNAME and cd $CPATH"
-        eval "docker exec -it $instant_name /bin/bash -c 'cd $CPATH&&su jlee'"
+        eval "docker exec -it $instant_name /bin/bash -c 'cd $CPATH&&su $MTNAME'"
     fi
 fi

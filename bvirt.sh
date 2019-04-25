@@ -18,10 +18,9 @@ env_setup()
     [ ! -d $BS_LOGDIR ] && mkdir $BS_LOGDIR
     PKG_CONFIG_PATH=${BS_ROOTFS}/lib/pkgconfig/
     PKG_CONFIG_LIBDIR=${PKG_CONFIG_PATH}
-    CC=${CROSS_COMPILE}gcc
-    CXX=${CROSS_COMPILE}g++
     if [ "$TARGET" = "arm64" ];then
         TOOLPATH=/usr/local/gcc-linaro-7.3.1-2018.05-i686_aarch64-linux-gnu/bin
+        CROSS_COMPILE=aarch64-linux-gnu-
         CROSS_HOST=aarch64-linux-gnu
 
         ${TOOLPATH}/${CROSS_COMPILE}gcc -v &>/dev/null
@@ -50,7 +49,10 @@ env_setup()
         echo "unkonw target"
         exit 99
     fi
-    
+   
+    CC=${CROSS_COMPILE}gcc
+    CXX=${CROSS_COMPILE}g++
+ 
     export PATH BS_ROOTFS PKG_CONFIG_PATH PKG_CONFIG_LIBDIR CROSS_HOST CROSS_COMPILE 
     export CC CXX CONFIGURE_HOST
 
