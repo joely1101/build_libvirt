@@ -70,10 +70,16 @@ elif [ "$action" = "login" ];then
         #echo "lgoin as $MYNAME and cd $CPATH"
         eval "docker exec -it $instant_name /bin/bash -c 'cd $CPATH&&su $MTNAME'"
     fi
-elif [ "$action" = "runsh" ];then
+elif [ "$action" = "sh" ];then
 	shift
 	command=$@
 	[ "$command" = "" ] && echo "command not found"
 	echo "run '$command' in Machine  $inst_hostname"
 	eval "docker exec -it $instant_name /bin/bash -c 'cd $CPATH&&su -c \"$command\" $MTNAME'"
+else
+	echo "$0 dkbuild - build ubuntu 18 docker image that had installed compile package"
+        echo "$0 dkrun - start ubuntu 18(hostname is $$inst_hostname) in background."
+	echo "$0 dkstop - stop ubuntu 18."
+        echo "$0 login [root] - login by current user and cd to currect path"
+        echo "$0 sh     - run shell script in docker"
 fi
