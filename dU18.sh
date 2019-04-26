@@ -55,11 +55,11 @@ run_ubuntu18()
         echo "$instant_name already running"
     fi
 }
-if [ "$action" = "build" ];then
+if [ "$action" = "dkbuild" ];then
     build_ubuntu18
-elif [ "$action" = "run" ];then
+elif [ "$action" = "dkrun" ];then
     run_ubuntu18
-elif [ "$action" = "stop" ];then
+elif [ "$action" = "dkstop" ];then
     docker stop $instant_name
     docker rm $instant_name
 elif [ "$action" = "login" ];then
@@ -70,4 +70,10 @@ elif [ "$action" = "login" ];then
         #echo "lgoin as $MYNAME and cd $CPATH"
         eval "docker exec -it $instant_name /bin/bash -c 'cd $CPATH&&su $MTNAME'"
     fi
+elif [ "$action" = "runsh" ];then
+	shift
+	command=$@
+	[ "$command" = "" ] && echo "command not found"
+	echo "run '$command' in Machine  $inst_hostname"
+	eval "docker exec -it $instant_name /bin/bash -c 'cd $CPATH&&su -c \"$command\" $MTNAME'"
 fi
